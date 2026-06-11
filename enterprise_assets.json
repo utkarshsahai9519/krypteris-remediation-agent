@@ -1,0 +1,35 @@
+{
+    "srv-prod-db-01": {
+        "hostname": "prod-sql-primary",
+        "type": "Database Server",
+        "environment": "Production",
+        "asset_criticality": 5,
+        "contains_pii": true,
+        "network_segment": "isolated-core-vpc",
+        "active_connections": [
+            "srv-prod-web-01",
+            "srv-prod-web-02"
+        ]
+    },
+    "srv-prod-web-01": {
+        "hostname": "prod-nginx-public-01",
+        "type": "Web Gateway",
+        "environment": "Production",
+        "asset_criticality": 4,
+        "contains_pii": false,
+        "network_segment": "public-dmz",
+        "active_connections": [
+            "internet",
+            "srv-prod-db-01"
+        ]
+    },
+    "srv-dev-sandbox": {
+        "hostname": "dev-testing-box",
+        "type": "Development Sandbox",
+        "environment": "Development",
+        "asset_criticality": 1,
+        "contains_pii": false,
+        "network_segment": "internal-testing-subnet",
+        "active_connections": []
+    }
+}

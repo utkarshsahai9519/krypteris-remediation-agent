@@ -1,0 +1,23 @@
+[
+    {
+        "cve_id": "CVE-2024-3094",
+        "asset_id": "srv-prod-db-01",
+        "calculated_risk_score": 50.0,
+        "justification": "High CVSS score, critical asset, and trending threat intel.",
+        "remediation_strategy": "official_patch"
+    },
+    {
+        "cve_id": "CVE-2026-ZERO",
+        "asset_id": "srv-prod-web-01",
+        "calculated_risk_score": 34.0,
+        "justification": "High CVSS score, critical asset, and trending threat intel, but no official patch.",
+        "remediation_strategy": "generate_custom_workaround"
+    },
+    {
+        "cve_id": "CVE-2023-38545",
+        "asset_id": "srv-dev-sandbox",
+        "calculated_risk_score": 2.0,
+        "justification": "Low asset criticality and no immediate threat intel.",
+        "remediation_strategy": "official_patch"
+    }
+]

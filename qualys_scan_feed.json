@@ -1,0 +1,32 @@
+[
+    {
+        "asset_id": "srv-dev-sandbox",
+        "cve_id": "CVE-2023-38545",
+        "package": "curl",
+        "installed_version": "8.2.1",
+        "base_cvss_score": 9.8,
+        "exploit_available": true,
+        "threat_intel_trending": false,
+        "remediation_type": "official_patch_available"
+    },
+    {
+        "asset_id": "srv-prod-db-01",
+        "cve_id": "CVE-2024-3094",
+        "package": "xz-utils",
+        "installed_version": "5.6.0",
+        "base_cvss_score": 10.0,
+        "exploit_available": true,
+        "threat_intel_trending": true,
+        "remediation_type": "official_patch_available"
+    },
+    {
+        "asset_id": "srv-prod-web-01",
+        "cve_id": "CVE-2026-ZERO",
+        "package": "custom-auth-middleware",
+        "installed_version": "1.0.4",
+        "base_cvss_score": 8.5,
+        "exploit_available": true,
+        "threat_intel_trending": true,
+        "remediation_type": "no_official_patch"
+    }
+]
