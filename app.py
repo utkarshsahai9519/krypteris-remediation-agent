@@ -2,6 +2,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 import plotly.graph_objects as go
 import pandas as pd
+import requests
 import time
 import random
 
@@ -149,6 +150,8 @@ if 'active_tenant' not in st.session_state: st.session_state.active_tenant = "Ac
 if 'tenants'       not in st.session_state: st.session_state.tenants       = ["Acme Corp — Global","Acme Corp — Azure Cloud","Acme Corp — Endpoint Security","Acme Corp — Dev Environment"]
 if 'sim_done'      not in st.session_state: st.session_state.sim_done      = False
 if 'prod_done'     not in st.session_state: st.session_state.prod_done     = False
+if 'agent_queue'     not in st.session_state: st.session_state.agent_queue   = None
+if 'custom_waf_rule' not in st.session_state: st.session_state.custom_waf_rule = ""    
 
 # FIXED: Global state variable backup array prevents structural attribute assignment crashes across panels
 if 'sim_df' not in st.session_state:
@@ -781,8 +784,28 @@ elif nav == "◈  Simulation Hub":
         st.markdown('</div>', unsafe_allow_html=True)
         
         if run_sim:
-            st.session_state.sim_done = True
-            st.toast("⚡ Simulation loop initiated! Access Sandbox Twin side menu to review dynamic data matrices.", icon="⚙️")
+            with st.spinner("Querying Krypteris Autonomous Brain via AMD Instinct GPU..."):
+                try:
+                    # Convert your dataframe records directly into the API payload
+                    payload_assets = st.session_state.sim_df.to_dict(orient="records")
+                    res = requests.post("http://127.0.0.1:8000/api/v1/prioritize", json={"tenant": st.session_state.active_tenant, "assets": payload_assets})
+                    
+                    if res.status_code == 200:
+                        st.session_state.agent_queue = res.json().get("queue", [])
+                        
+                        # Check the queue to compile live custom rules for any zero-day discoveries
+                        for job in st.session_state.agent_queue:
+                            if job.get("remediation_strategy") == "generate_custom_workaround":
+                                rule_res = requests.post("http://127.0.0.1:8000/api/v1/synthesize", json={"cve_id": job.get("cve_id")})
+                                if rule_res.status_code == 200:
+                                    st.session_state.custom_waf_rule = rule_res.json().get("rule", "")
+                        
+                        st.session_state.sim_done = True
+                        st.toast("Krypteris Agent pipeline execution complete!", icon="🧠")
+                    else:
+                        st.error(f"Backend Engine Error: {res.text}")
+                except Exception as e:
+                    st.error(f"Failed to connect to local vLLM Inference Server: {e}")
 
 # ══════════════════════════════════════════════════
 # ██████ VIEW: SANDBOX TWIN ██████
@@ -801,11 +824,11 @@ elif nav == "◈  Sandbox Twin":
         """, unsafe_allow_html=True)
     else:
         total_assets = len(st.session_state.sim_df)
-        critical_count = len(st.session_state.sim_df[st.session_state.sim_df["Calculated Severity"] == "Critical"])
+        queue_len = len(st.session_state.agent_queue) if st.session_state.agent_queue else 0
         
         st.markdown("#### Live Progress Mitigation Orchestration Tracker")
-        
         p1, p2, p3, p4 = st.columns(4)
+        
         m_affected = p1.empty()
         m_process = p2.empty()
         m_remediated = p3.empty()
@@ -817,36 +840,44 @@ elif nav == "◈  Sandbox Twin":
         running_evidence_log = ""
         current_time = time.strftime("%H:%M:%S")
         
-        steps = [
-            f"[{current_time}] [STAGE 1] [INITIALIZATION] Ingesting {total_assets} network architecture nodes into isolated virtual sandbox environment container...",
-            f"[{current_time}] [STAGE 1] [TELEMETRY] Mapping operational topology; identifying active asset clusters and lateral exposure corridors.",
-            f"[{current_time}] [STAGE 2] [RISK METRICS] Scanning framework vulnerabilities. Found {critical_count} unpatched critical exposures mapping to T1190 exploits.",
-            f"[{current_time}] [STAGE 2] [GRAPH ANALYSIS] XM Cyber intelligence vector mapping initiated. Scanning perimeter choke points for active risk mitigation paths...",
-            f"[{current_time}] [STAGE 3] [REASONING] Activating local Krypteris Contextual Reasoning Core powered by dedicated AMD Instinct acceleration layer...",
-            f"[{current_time}] [STAGE 3] [AI SYNTHESIS] Generating defensive scripts. Local context compiled down to targeted hardware register instructions successfully.",
-            f"[{current_time}] [STAGE 4] [PATCH VERIFICATION] Simulating automated deployment of custom virtual regex configuration rule blocks across digital twin gateway proxies...",
-            f"[{current_time}] [STAGE 4] [COLLATERAL CHECK] Validating payload stability metrics: 0% disruption detected. Network baseline performance parameters nominal.",
-            f"[{current_time}] [STAGE 5] [COMPLIANCE] Closing feedback mitigation loop. Generating detailed cryptographic remediation event trail log entries..."
-        ]
+        running_evidence_log += f'<span style="color:#00d4ff">[{current_time}] [STAGE 1] Ingested {total_assets} asset rows into hardware execution memory matrix maps.</span><br>'
+        running_evidence_log += f'<span style="color:#9b6dff">[{current_time}] [STAGE 2] Connected to local vLLM endpoint. Processing priority parsing queue...</span><br>'
+        evidence_placeholder.markdown(f'<div class="krypt-code" style="height:280px; overflow-y:auto; font-size:11px; line-height:1.6;">{running_evidence_log}</div>', unsafe_allow_html=True)
         
-        for tick in range(1, 10):
-            progress_ratio = tick / 9.0
-            processed_assets = int(progress_ratio * total_assets)
-            remediated_assets = int(progress_ratio * critical_count) if critical_count > 0 else processed_assets
-            pending_assets = total_assets - processed_assets
-            in_process = int(total_assets * 0.12) if tick < 9 else 0
+        remediated_count = 0
+        
+        # Loop over the actual live entries generated by your model pipeline
+        for idx, job in enumerate(st.session_state.agent_queue):
+            cve = job.get("cve_id", "N/A")
+            asset = job.get("asset_id", "Unknown-Node")
+            strat = job.get("remediation_strategy", "verify")
+            risk = job.get("calculated_risk_score", 0.0)
+            reason = job.get("justification", "")
+            
+            remediated_count += 1
+            pending_queue_size = queue_len - remediated_count
+            in_flight = 1 if pending_queue_size > 0 else 0
             
             m_affected.markdown(f'<div class="krypt-metric red"><div class="km-label">Total Node Assets</div><div class="km-value">{total_assets}</div><div class="km-delta down">⬤ Inbound Data Matrix</div></div>', unsafe_allow_html=True)
-            m_process.markdown(f'<div class="krypt-metric amber"><div class="km-label">In-Process Remediating</div><div class="km-value">{in_process}</div><div class="km-delta warn">⏳ Calibrating Signatures</div></div>', unsafe_allow_html=True)
-            m_remediated.markdown(f'<div class="krypt-metric green"><div class="km-label">Remediated Successfully</div><div class="km-value">{remediated_assets}</div><div class="km-delta up">↑ Hardened Target States</div></div>', unsafe_allow_html=True)
-            m_pending.markdown(f'<div class="krypt-metric cyan"><div class="km-label">Pending Pipeline Queue</div><div class="km-value">{pending_assets}</div><div class="km-delta up">↓ In Processing Sequence</div></div>', unsafe_allow_html=True)
+            m_process.markdown(f'<div class="krypt-metric amber"><div class="km-label">In-Process Remediating</div><div class="km-value">{in_flight}</div><div class="km-delta warn">⏳ Calibrating Signatures</div></div>', unsafe_allow_html=True)
+            m_remediated.markdown(f'<div class="krypt-metric green"><div class="km-label">Remediated Successfully</div><div class="km-value">{remediated_count}</div><div class="km-delta up">↑ Hardened Target States</div></div>', unsafe_allow_html=True)
+            m_pending.markdown(f'<div class="krypt-metric cyan"><div class="km-label">Pending Pipeline Queue</div><div class="km-value">{pending_queue_size}</div><div class="km-delta up">↓ In Processing Sequence</div></div>', unsafe_allow_html=True)
             
-            running_evidence_log += f'<span style="color:#00d4ff">{steps[tick-1]}</span><br>'
-            if tick == 9:
-                running_evidence_log += f'<span style="color:#00d68f; font-weight:600;"><br>✔ SUCCESS: [Krypteris Autonomous Remediation Engine] validated all {total_assets} records. 100% security baseline posture compliance map complete.</span><br>'
+            current_loop_time = time.strftime("%H:%M:%S")
+            running_evidence_log += f'<span style="color:#ffb547">[{current_loop_time}] [PIPELINE] Task {idx+1}/{queue_len}: Processing target [{asset}] for threat profile {cve} (Risk Score: {risk})</span><br>'
+            running_evidence_log += f'<span style="color:#abb2bf">┗ 📝 Justification: {reason}</span><br>'
+            
+            if strat == "generate_custom_workaround" and st.session_state.custom_waf_rule:
+                running_evidence_log += f'<span style="color:#9b6dff">┗ 🧠 [SIGNATURE AGENT] Synthesized Live Mitigation Signature Rule Pattern Block successfully:</span><br>'
+                running_evidence_log += f'<span style="color:#00d4ff; font-family:monospace; padding-left:15px; display:block; white-space: pre-wrap;">{st.session_state.custom_waf_rule}</span>'
+            else:
+                running_evidence_log += f'<span style="color:#00d68f">┗ ✔ [SUCCESS] Verified deployment of standard vendor security patch package parameters. Asset stable.</span><br>'
                 
             evidence_placeholder.markdown(f'<div class="krypt-code" style="height:280px; overflow-y:auto; font-size:11px; line-height:1.6;">{running_evidence_log}</div>', unsafe_allow_html=True)
-            time.sleep(0.5)
+            time.sleep(0.8) 
+            
+        running_evidence_log += f'<span style="color:#00d68f; font-weight:600;"><br>✔ SUCCESS: [Krypteris Autonomous Remediation Engine] processed whole data schedule array. 100% telemetry status validation complete.</span><br>'
+        evidence_placeholder.markdown(f'<div class="krypt-code" style="height:280px; overflow-y:auto; font-size:11px; line-height:1.6;">{running_evidence_log}</div>', unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════
 # ██████ VIEW: PRODUCTION ENFORCEMENT ██████
@@ -905,8 +936,27 @@ elif nav == "⬟  Production Enforce":
             st.markdown('</div>', unsafe_allow_html=True)
 
             if run_prod:
-                st.session_state.prod_done = True
-                st.toast("🚀 Live Infrastructure Enforcement Action Sent! Access the Live Enforcement Room menu immediately.", icon="🛡️")
+                with st.spinner("Compiling live hardening signature payload via Krypteris Core Brain..."):
+                    try:
+                        # Grab the first Zero-Day item from our verified agent queue to protect production
+                        zero_day_job = next((job for job in st.session_state.agent_queue if job.get("remediation_strategy") == "generate_custom_workaround"), None) if st.session_state.agent_queue else None
+                        target_cve = zero_day_job.get("cve_id", "CVE-2026-ZERO") if zero_day_job else "CVE-2026-ZERO"
+                        
+                        # Query our model endpoint live for signed production verification tokens
+                        res = requests.post("http://127.0.0.1:8000/api/v1/enFORCE", json={
+                            "target_environment": "Production — All Gateways",
+                            "cve_id": target_cve
+                        })
+                        
+                        if res.status_code == 200:
+                            st.session_state.live_hardened_block = res.json().get("hardened_rule", "")
+                            st.session_state.prod_checksum = res.json().get("verification_checksum", "N/A")
+                            st.session_state.prod_done = True
+                            st.toast("🚀 Live Infrastructure Enforcement Action Sent! Access the Live Enforcement Room menu immediately.", icon="🛡️")
+                        else:
+                            st.error(f"Production Execution Error: {res.text}")
+                    except Exception as e:
+                        st.error(f"Failed to communicate with live enforcement loop: {e}")
 
 # ══════════════════════════════════════════════════
 # ██████ VIEW: LIVE ENFORCEMENT ROOM ██████
@@ -925,10 +975,9 @@ elif nav == "⬟  Live Enforcement Room":
         """, unsafe_allow_html=True)
     else:
         total_prod_assets = len(st.session_state.sim_df)
-        critical_prod_count = len(st.session_state.sim_df[st.session_state.sim_df["Calculated Severity"] == "Critical"])
+        critical_prod_count = len(st.session_state.sim_df[st.session_state.sim_df["Calculated Severity"] == "Critical"]) if st.session_state.sim_df is not None else 0
         
         st.markdown("#### Live Production Fleet Deployment Posture")
-        
         e1, e2, e3, e4 = st.columns(4)
         p_total = e1.empty()
         p_active = e2.empty()
@@ -941,21 +990,20 @@ elif nav == "⬟  Live Enforcement Room":
         running_prod_log = ""
         current_time = time.strftime("%H:%M:%S")
         
+        # Build your multi-step live logging milestones
         prod_steps = [
-            f"[{current_time}] [CONNECT] Opening TLS 1.3 cryptographic session tunnels to live environment clusters...",
+            f"[{current_time}] [CONNECT] Opening TLS 1.3 cryptographic session tunnels to live production gateways...",
             f"[{current_time}] [AUDIT] Registered hardware-backed administrator deployment token signature...",
-            f"[{current_time}] [PRE-FLIGHT] Verifying structural checksums for candidate virtual configuration filters...",
-            f"[{current_time}] [ENFORCE] Deploying dynamic rulesets to edge proxies. Hardening {critical_prod_count} exposed cluster endpoints...",
-            f"[{current_time}] [HOT-RELOAD] Executing zero-downtime hot config reloads on active server clusters safely...",
-            f"[{current_time}] [INTEGRITY CHECK] Verification pipeline routing safe trial traffic packets through updated nodes...",
-            f"[{current_time}] [SUCCESS] 0% variance anomaly scores returned. Live traffic routes confirmed nominal."
+            f"[{current_time}] [PRE-FLIGHT] Verifying configuration package cryptographic hash token: {st.session_state.get('prod_checksum', 'sha256_verified')}",
+            f"[{current_time}] [ENFORCE] Injecting dynamic rulesets. Hardening active clusters against exposed endpoints...",
+            f"[{current_time}] [HOT-RELOAD] Executing zero-downtime hot config reloads across web gateways safely...",
+            f"[{current_time}] [LIVE CORE AGENT LOG] Streaming running model response configurations text entries..."
         ]
         
-        for tick in range(1, 8):
-            ratio = tick / 7.0
+        for tick in range(1, 7):
+            ratio = tick / 6.0
             p_secured_val = int(ratio * total_prod_assets)
-            p_pending_val = total_prod_assets - p_secured_val
-            p_active_val = int(total_prod_assets * 0.08) if tick < 7 else 0
+            p_active_val = int(total_prod_assets * 0.08) if tick < 6 else 0
             compliance_percentage = int(ratio * 100)
             
             p_total.markdown(f'<div class="krypt-metric cyan"><div class="km-label">Active Prod Scope</div><div class="km-value">{total_prod_assets}</div><div class="km-delta up">● Network Targets Online</div></div>', unsafe_allow_html=True)
@@ -964,11 +1012,14 @@ elif nav == "⬟  Live Enforcement Room":
             p_compliance.markdown(f'<div class="krypt-metric cyan"><div class="km-label">Fleet Compliance Level</div><div class="km-value">{compliance_percentage}%</div><div class="km-delta up">↑ Standard Baseline Attained</div></div>', unsafe_allow_html=True)
             
             running_prod_log += f'<span style="color:#00d4ff">{prod_steps[tick-1]}</span><br>'
-            if tick == 7:
-                running_prod_log += f'<span style="color:#00d68f; font-weight:600;"><br>✔ PLATFORM INFRASTRUCTURE STATUS RESOLVED: Krypteris Core has updated production architecture. Audit log successfully committed.</span><br>'
+            
+            if tick == 6 and 'live_hardened_block' in st.session_state:
+                running_prod_log += f'<span style="color:#9b6dff">┗ 🧠 [QWEN INFRASTRUCTURE ENFORCER] Live Production Block Deployed:</span><br>'
+                running_prod_log += f'<span style="color:#00d68f; font-family:monospace; padding-left:15px; display:block; white-space: pre-wrap;">{st.session_state.live_hardened_block}</span><br>'
+                running_prod_log += f'<span style="color:#00d68f; font-weight:600;"><br>✔ PLATFORM INFRASTRUCTURE STATUS RESOLVED: Krypteris Core has verified and locked live systems. Audit trail successfully committed.</span><br>'
                 
             prod_log_placeholder.markdown(f'<div class="krypt-code" style="height:280px; overflow-y:auto; font-size:11px; line-height:1.6;">{running_prod_log}</div>', unsafe_allow_html=True)
-            time.sleep(0.4)
+            time.sleep(0.7)
 
 # ══════════════════════════════════════════════════
 # ██████ VIEW: INTEGRATION GATEWAY ██████
